@@ -35,65 +35,89 @@ import (
 // redirecting any request containing . or .. elements to an
 // equivalent .- and ..-free URL.
 type ServeMux struct {
-	mu    sync.RWMutex
-	m     map[string]muxEntry
-	hosts bool // whether any patterns contain hostnames
+	mu       sync.RWMutex
+	routes   map[string][]*Route // pattern -> routes
+	anyHosts bool                // whether any patterns contain hostnames
 }
 
-type muxEntry struct {
-	explicit bool
-	h        http.Handler
-	pattern  string
+// NewServeMux allocates and returns a new *ServeMux.
+func NewServeMux() *ServeMux {
+	return &ServeMux{
+		routes: make(map[string][]*Route),
+	}
 }
 
-// NewServeMux allocates and returns a new ServeMux.
-func NewServeMux() *ServeMux { return &ServeMux{m: make(map[string]muxEntry)} }
-
-// Does path match pattern?
-func pathMatch(pattern, path string) bool {
-	if len(pattern) == 0 {
-		// should not happen
-		return false
-	}
-	n := len(pattern)
-	if pattern[n-1] != '/' {
-		return pattern == path
-	}
-	return len(path) >= n && path[0:n] == pattern
+// Handle registers the handler for the given pattern. Handle panics if the
+// pattern is empty or the handler is nil.
+func (mux *ServeMux) Handle(pattern string, handler http.Handler) {
+	mux.addRoute(pattern, NewRoute(pattern, handler))
 }
 
-// Return the canonical path for p, eliminating . and .. elements.
-func cleanPath(p string) string {
-	if p == "" {
-		return "/"
-	}
-	if p[0] != '/' {
-		p = "/" + p
-	}
-	np := path.Clean(p)
-	// path.Clean removes trailing slash except for root;
-	// put the trailing slash back if necessary.
-	if p[len(p)-1] == '/' && np != "/" {
-		np += "/"
-	}
-	return np
+// HandleFunc registers the handler function for the given pattern.
+func (mux *ServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	mux.Handle(pattern, http.HandlerFunc(handler))
 }
 
-// Find a handler on a handler map given a path string
-// Most-specific (longest) pattern wins
-func (mux *ServeMux) match(path string) (h http.Handler, pattern string) {
-	var n = 0
-	for k, v := range mux.m {
-		if !pathMatch(k, path) {
-			continue
-		}
-		if h == nil || len(k) > n {
-			n = len(k)
-			h = v.h
-			pattern = v.pattern
-		}
-	}
-	return
+// HandleRoute registers the handler for the pattern and rules. HandleRoute
+// returns the new Route entry.
+func (mux *ServeMux) HandleRoute(pattern string, handler http.Handler, rules ...rule) *Route {
+	route := NewRoute(pattern, handler, rules...)
+	mux.addRoute(pattern, route)
+	return route
+}
+
+// HandleRouteFunc registers the handler function for the pattern and rules.
+// Returns the new Route entry.
+func (mux *ServeMux) HandleRouteFunc(pattern string, handler func(http.ResponseWriter, *http.Request), rules ...rule) *Route {
+	return mux.HandleRoute(pattern, http.HandlerFunc(handler), rules...)
+}
+
+// Get registers the handler for the pattern and GET requests only. Returns
+// the new Route entry.
+func (mux *ServeMux) Get(pattern string, handler http.Handler) *Route {
+	return mux.HandleRoute(pattern, handler, NewMethodRule("GET"))
+}
+
+// Post registers the handler for the pattern and POST requests only. Returns
+// the new Route entry.
+func (mux *ServeMux) Post(pattern string, handler http.Handler) *Route {
+	return mux.HandleRoute(pattern, handler, NewMethodRule("POST"))
+}
+
+// Put registers the handler for the pattern and PUT requests only. Returns
+// the new Route entry.
+func (mux *ServeMux) Put(pattern string, handler http.Handler) *Route {
+	return mux.HandleRoute(pattern, handler, NewMethodRule("PUT"))
+}
+
+// Delete registers the handler for the pattern and DELETE requests only.
+// Returns the new Route entry.
+func (mux *ServeMux) Delete(pattern string, handler http.Handler) *Route {
+	return mux.HandleRoute(pattern, handler, NewMethodRule("DELETE"))
+}
+
+// GetFunc registers the handler function for the pattern and GET requests
+// only. Returns the new Route entry.
+func (mux *ServeMux) GetFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
+	return mux.Get(pattern, http.HandlerFunc(handler))
+}
+
+// PostFunc registers the handler function for the pattern and POST requests
+// only. Returns the new Route entry.
+func (mux *ServeMux) PostFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
+	return mux.Post(pattern, http.HandlerFunc(handler))
+}
+
+// PutFunc registers the handler function for the pattern and PUT requests
+// only. Returns the new Route entry.
+func (mux *ServeMux) PutFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
+	return mux.Put(pattern, http.HandlerFunc(handler))
+}
+
+// DeleteFunc registers the handler function for the pattern and DELETE
+// requests only. Returns the new Route entry.
+func (mux *ServeMux) DeleteFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
+	return mux.Delete(pattern, http.HandlerFunc(handler))
 }
 
 // Handler returns the handler to use for the given request,
@@ -108,36 +132,16 @@ func (mux *ServeMux) match(path string) (h http.Handler, pattern string) {
 //
 // If there is no registered handler that applies to the request,
 // Handler returns a ``page not found'' handler and an empty pattern.
-func (mux *ServeMux) Handler(r *http.Request) (h http.Handler, pattern string) {
-	if r.Method != "CONNECT" {
-		if p := cleanPath(r.URL.Path); p != r.URL.Path {
-			_, pattern = mux.handler(r.Host, p)
-			url := *r.URL
-			url.Path = p
+func (mux *ServeMux) Handler(request *http.Request) (h http.Handler, pattern string) {
+	if request.Method != "CONNECT" {
+		if cleanedPath := cleanPath(request.URL.Path); cleanedPath != request.URL.Path {
+			url := *request.URL
+			url.Path = cleanedPath
+			_, pattern = mux.handler(request, cleanedPath)
 			return http.RedirectHandler(url.String(), http.StatusMovedPermanently), pattern
 		}
 	}
-
-	return mux.handler(r.Host, r.URL.Path)
-}
-
-// handler is the main implementation of Handler.
-// The path is known to be in canonical form, except for CONNECT methods.
-func (mux *ServeMux) handler(host, path string) (h http.Handler, pattern string) {
-	mux.mu.RLock()
-	defer mux.mu.RUnlock()
-
-	// Host-specific pattern takes precedence over generic ones
-	if mux.hosts {
-		h, pattern = mux.match(host + path)
-	}
-	if h == nil {
-		h, pattern = mux.match(path)
-	}
-	if h == nil {
-		h, pattern = http.NotFoundHandler(), ""
-	}
-	return
+	return mux.handler(request, request.URL.Path)
 }
 
 // ServeHTTP dispatches the request to the handler whose
@@ -154,46 +158,143 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.ServeHTTP(w, r)
 }
 
-// Handle registers the handler for the given pattern.
-// If a handler already exists for pattern, Handle panics.
-func (mux *ServeMux) Handle(pattern string, handler http.Handler) {
+// addRoute registers the pattern for the handler for requests with the given
+// HTTP method. If the pattern is a /tree/, inserts an implicit permanent
+// redirect for /tree to /tree/ (provided no implicit /tree route exists). If
+// the pattern is empty or the handler is nil, add panics.
+func (mux *ServeMux) addRoute(pattern string, route *Route) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
 
-	if pattern == "" {
-		panic("http: invalid pattern " + pattern)
+	if route.pattern == "" {
+		panic("warp: invalid pattern " + pattern)
 	}
-	if handler == nil {
-		panic("http: nil handler")
-	}
-	if mux.m[pattern].explicit {
-		panic("http: multiple registrations for " + pattern)
+	if route.handler == nil {
+		panic("warp: nil handler")
 	}
 
-	mux.m[pattern] = muxEntry{explicit: true, h: handler, pattern: pattern}
+	mux.routes[pattern] = append(mux.routes[pattern], route)
 
-	if pattern[0] != '/' {
-		mux.hosts = true
+	// if registering the first pattern with a hostname
+	if !mux.anyHosts && len(pattern) > 0 && pattern[0] != '/' {
+		mux.anyHosts = true
 	}
 
-	// Helpful behavior:
-	// If pattern is /tree/, insert an implicit permanent redirect for /tree.
-	// It can be overridden by an explicit registration.
+	// check if pattern is a /tree/ and no implicit route exists for the pattern
+	// and insert a /tree -> /tree/ permanent redirect. If the pattern contains
+	// a hostname, it is stripped from the redirection target url. Note that the
+	// pattern key is /tree, but the route pattern is /tree/ for compliance with
+	// http.ServeMux.Handler behavior and tests.
 	n := len(pattern)
-	if n > 0 && pattern[n-1] == '/' && !mux.m[pattern[0:n-1]].explicit {
-		// If pattern contains a host name, strip it and use remaining
-		// path for redirect.
-		path := pattern
+	if n > 1 && pattern[n-1] == '/' && !mux.hasImplicitRoute(pattern[:n-1]) {
+		target := pattern
+		// if pattern has a hostname, strip it from the target
 		if pattern[0] != '/' {
-			// In pattern, at least the last character is a '/', so
-			// strings.Index can't be -1.
-			path = pattern[strings.Index(pattern, "/"):]
+			target = pattern[strings.Index(pattern, "/"):]
 		}
-		mux.m[pattern[0:n-1]] = muxEntry{h: http.RedirectHandler(path, http.StatusMovedPermanently), pattern: pattern}
+		route := &Route{pattern, http.RedirectHandler(target, http.StatusMovedPermanently), true, nil}
+		mux.routes[pattern[:n-1]] = append(mux.routes[pattern[:n-1]], route)
 	}
 }
 
-// HandleFunc registers the handler function for the given pattern.
-func (mux *ServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	mux.Handle(pattern, http.HandlerFunc(handler))
+// hasImplicitRoute returns true if the pattern has an implicit route (i.e.
+// added by ServeMux), false otherwise.
+func (mux *ServeMux) hasImplicitRoute(nonTreePattern string) bool {
+	for _, route := range mux.routes[nonTreePattern] {
+		if route.implicit {
+			return true
+		}
+	}
+	return false
+}
+
+// handler is the main implementation of Handler. Matches the path to a route
+// and returns the handler and pattern of the route. Host-specific patterns
+// take precedence over generic patterns. The given path is assumed to be the
+// canonical (cleaned) request.URL.Path, except for CONNECT methods. Returns a
+// NotFoundHandler and empty string pattern if no route matches.
+func (mux *ServeMux) handler(request *http.Request, path string) (handler http.Handler, pattern string) {
+	mux.mu.RLock()
+	defer mux.mu.RUnlock()
+
+	// host-specific patterns
+	if mux.anyHosts {
+		handler, pattern = mux.match(request, request.Host+path)
+	}
+	// generic patterns
+	if handler == nil {
+		handler, pattern = mux.match(request, path)
+	}
+	// no handler found
+	if handler == nil {
+		handler, pattern = http.NotFoundHandler(), ""
+	}
+	return handler, pattern
+}
+
+// match find the route that most closely matches the request. It first checks
+// the request path against registered patterns for different route sets. Then,
+// for routes matching the pattern, it checks that the request matches the
+// route rules. Longer patterns (more specific) and explicit routes are
+// preferred.
+func (mux *ServeMux) match(request *http.Request, path string) (handler http.Handler, reportPattern string) {
+	var n = 0
+	for pattern, routes := range mux.routes {
+		// find patterns that match the path
+		if !pathMatch(pattern, path) {
+			continue
+		}
+
+		for _, route := range routes {
+			// find routes that are allowed for the request
+			if !route.allows(request) {
+				continue
+			}
+			// prefer longer patterns
+			if handler == nil || len(pattern) > n {
+				n = len(pattern)
+				handler = route.handler
+				// route's reported pattern differs from it pattern key for redirects
+				reportPattern = route.pattern
+			}
+			// prefer explicit routes
+			if len(pattern) == n && !route.implicit {
+				handler = route.handler
+				reportPattern = route.pattern
+			}
+		}
+	}
+	return handler, reportPattern
+}
+
+// pathMatch returns true if the path matches the pattern
+func pathMatch(pattern, path string) bool {
+	if len(pattern) == 0 {
+		// should not happen
+		return false
+	}
+	n := len(pattern)
+	// if pattern is a /leaf, path must match exactly
+	if pattern[n-1] != '/' {
+		return pattern == path
+	}
+	// if pattern is a /tree/, path must start with the pattern
+	return len(path) >= n && path[0:n] == pattern
+}
+
+// cleanPath returns the canonical path, eliminating . and .. elements.
+func cleanPath(p string) string {
+	if p == "" {
+		return "/"
+	}
+	if p[0] != '/' {
+		p = "/" + p
+	}
+	np := path.Clean(p)
+	// path.Clean removes trailing slash except for root;
+	// put the trailing slash back if necessary.
+	if p[len(p)-1] == '/' && np != "/" {
+		np += "/"
+	}
+	return np
 }
