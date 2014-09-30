@@ -1,6 +1,8 @@
 package warp
 
 import (
+	"bytes"
+	"fmt"
 	"net/http"
 	"path"
 	"strings"
@@ -92,7 +94,7 @@ func (mux *ServeMux) Put(pattern string, handler http.Handler) *Route {
 
 // Delete registers the handler for the pattern and DELETE requests only.
 // Returns the new Route entry.
-func (mux *ServeMux) Delete(pattern string, handler http.Handler) *Route {
+func (mux *ServeMux) Del(pattern string, handler http.Handler) *Route {
 	return mux.HandleRoute(pattern, handler, NewMethodRule("DELETE"))
 }
 
@@ -116,8 +118,8 @@ func (mux *ServeMux) PutFunc(pattern string, handler func(http.ResponseWriter, *
 
 // DeleteFunc registers the handler function for the pattern and DELETE
 // requests only. Returns the new Route entry.
-func (mux *ServeMux) DeleteFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
-	return mux.Delete(pattern, http.HandlerFunc(handler))
+func (mux *ServeMux) DelFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
+	return mux.Del(pattern, http.HandlerFunc(handler))
 }
 
 // Handler returns the handler to use for the given request,
@@ -156,6 +158,19 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h, _ := mux.Handler(r)
 	h.ServeHTTP(w, r)
+}
+
+// String returns a string representation of the registered routes
+func (mux *ServeMux) String() string {
+	mux.mu.RLock()
+	defer mux.mu.RUnlock()
+	var buf bytes.Buffer
+	for pattern, _ := range mux.routes {
+		for _, route := range mux.routes[pattern] {
+			fmt.Fprintf(&buf, "%s -> %+v \n", pattern, route)
+		}
+	}
+	return buf.String()
 }
 
 // addRoute registers the pattern for the handler for requests with the given
@@ -199,8 +214,8 @@ func (mux *ServeMux) addRoute(pattern string, route *Route) {
 
 // hasImplicitRoute returns true if the pattern has an implicit route (i.e.
 // added by ServeMux), false otherwise.
-func (mux *ServeMux) hasImplicitRoute(nonTreePattern string) bool {
-	for _, route := range mux.routes[nonTreePattern] {
+func (mux *ServeMux) hasImplicitRoute(pattern string) bool {
+	for _, route := range mux.routes[pattern] {
 		if route.implicit {
 			return true
 		}
