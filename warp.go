@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
@@ -156,8 +157,13 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	h, _ := mux.Handler(r)
-	h.ServeHTTP(w, r)
+	handler, pattern := mux.Handler(r)
+	// add capture params to query params
+	_, _, params := pathMatch(pattern, r.URL.Path)
+	if len(params) > 0 {
+		r.URL.RawQuery = url.Values(params).Encode() + "&" + r.URL.RawQuery
+	}
+	handler.ServeHTTP(w, r)
 }
 
 // String returns a string representation of the registered routes
@@ -234,11 +240,11 @@ func (mux *ServeMux) handler(request *http.Request, path string) (handler http.H
 
 	// host-specific patterns
 	if mux.anyHosts {
-		handler, pattern = mux.match(request, request.Host+path)
+		handler, pattern, _ = mux.match(request, request.Host+path)
 	}
 	// generic patterns
 	if handler == nil {
-		handler, pattern = mux.match(request, path)
+		handler, pattern, _ = mux.match(request, path)
 	}
 	// no handler found
 	if handler == nil {
@@ -247,54 +253,159 @@ func (mux *ServeMux) handler(request *http.Request, path string) (handler http.H
 	return handler, pattern
 }
 
-// match find the route that most closely matches the request. It first checks
-// the request path against registered patterns for different route sets. Then,
-// for routes matching the pattern, it checks that the request matches the
-// route rules. Longer patterns (more specific) and explicit routes are
-// preferred.
-func (mux *ServeMux) match(request *http.Request, path string) (handler http.Handler, reportPattern string) {
-	var n = 0
+// match will find the route that most closely matches the request. It first
+// checks the request path against registered patterns for different route
+// sets. Then, for routes matching the pattern, it checks that the request
+// matches the route rules. In decreasing importance, longer patterns (more
+// specific), explicit routes, and more capture params are preferred.
+// Examples:
+// Path /foo/bar/ matches /foo/bar/ over /foo/
+// Path /explicit matches registered /explicit route over an implicit /explicit
+// -> /explicit/ redirect from registering /explicit/
+// Path /notes/new matches /notes/new over /notes/:id
+// Path /site/i matches /site/:name over /site/
+func (mux *ServeMux) match(request *http.Request, path string) (handler http.Handler, reportPattern string, params url.Values) {
+	var n = 0 // num runes matched in previous best match
 	for pattern, routes := range mux.routes {
-		// find patterns that match the path
-		if !pathMatch(pattern, path) {
+		// skip patterns that the path doesn't match
+		isMatch, runeCount, parameters := pathMatch(pattern, path)
+		if !isMatch {
 			continue
 		}
-
 		for _, route := range routes {
-			// find routes that are allowed for the request
+			// skip routes with rules that don't allow the request
 			if !route.allows(request) {
 				continue
 			}
 			// prefer longer patterns
-			if handler == nil || len(pattern) > n {
-				n = len(pattern)
+			if handler == nil || runeCount > n {
+				n = runeCount
 				handler = route.handler
-				// route's reported pattern differs from it pattern key for redirects
+				// redirect route's pattern differs from pattern key
 				reportPattern = route.pattern
+				params = parameters
 			}
-			// prefer explicit routes
-			if len(pattern) == n && !route.implicit {
-				handler = route.handler
-				reportPattern = route.pattern
+
+			if runeCount == n {
+				// prefer explicit routes, longer patterns excluding param names
+				if !route.implicit {
+					handler = route.handler
+					reportPattern = route.pattern
+					params = parameters
+				}
 			}
 		}
 	}
-	return handler, reportPattern
+	return handler, reportPattern, params
 }
 
-// pathMatch returns true if the path matches the pattern
-func pathMatch(pattern, path string) bool {
+// pathMatch returns whether the path matches the given pattern, how many
+// runes matched, and the map of parameters captured from the path. /leaf
+// patterns require the path to match exactly, while /tree/ patterns only
+// require the path to start with /tree/ (so pattern / matches all paths).
+func pathMatch(pattern, path string) (bool, int, url.Values) {
+	var params = make(url.Values)
+	var runeCount = 0
+
 	if len(pattern) == 0 {
 		// should not happen
+		return false, runeCount, nil
+	}
+
+	// if pattern equals path, the path matches and the pattern has no capture params
+	if pattern == path {
+		return true, len([]rune(pattern)), nil
+	}
+
+	rPattern := []rune(pattern)
+	rPath := []rune(path)
+	n := len(rPattern)
+	m := len(rPath)
+	var i, j int
+	// traverse pattern runes, capture params, compare to path runes
+	for i < n {
+		switch {
+		case j >= m: // reached path end, but pattern has more runes
+			return false, runeCount, nil
+		case rPattern[i] == ':':
+			var name, value string
+			var next rune
+			name, i, next = captureName(rPattern, i+1) // param name after ':'
+			value, j = captureValue(rPath, j, next)
+			params.Add(":"+name, value)
+		case rPattern[i] == rPath[j]:
+			i++
+			j++
+			runeCount++
+		default:
+			return false, runeCount, nil
+		}
+	}
+
+	// if pattern is a /tree/, path need only start with the pattern
+	if rPattern[n-1] == '/' {
+		return true, runeCount, params
+	}
+	// otherwise, /leaf pattern so path indexes 0 through len(path) should
+	// have matched the pattern
+	if j != m {
+		return false, runeCount, nil
+	}
+	return true, runeCount, params
+}
+
+// captureName captures the param name starting at the given rune index from
+// the pattern. Returns the captured name, the next rune index, and the next
+// non-variable rune or the zero value rune if no runes remain.
+func captureName(pattern []rune, i int) (string, int, rune) {
+	var next rune // zero value rune
+	var start = i
+	// URL query params are encoded, so the :param names should be encoded
+	// as well since some programs may assume all param names are escaped.
+	for i < len(pattern) && isParamRune(pattern[i]) {
+		i++
+	}
+	if i < len(pattern) {
+		next = pattern[i]
+	}
+	return string(pattern[start:i]), i, next
+}
+
+// captureValue captures the param value starting at the given rune index
+// in the path and not continuing past the given endRune. Returns the
+// captured value and the next rune index after the captured value.
+func captureValue(path []rune, j int, endMark rune) (string, int) {
+	var start = j
+	for j < len(path) && path[j] != endMark && path[j] != '/' {
+		j++
+	}
+	return string(path[start:j]), j
+}
+
+// isUnescaped returns whether the rune is a reserved character that should
+// be percent encoded. These runes are prohibited from pattern param names.
+// https://en.wikipedia.org/wiki/Percent-encoding#Types_of_URI_characters
+func isUnescaped(r rune) bool {
+	switch r {
+	case '!', '#', '$', '&', '\'', '(', ')', '*', '+', ',', '/', ':', ';',
+		'=', '?', '@', '[', ']':
+		return true
+	default:
 		return false
 	}
-	n := len(pattern)
-	// if pattern is a /leaf, path must match exactly
-	if pattern[n-1] != '/' {
-		return pattern == path
+}
+
+// isParamRune returns true if the rune is allowed in a pattern :param name.
+// Notably, '_' is allowed in names.
+func isParamRune(r rune) bool {
+	switch r {
+	// pattern literals may reasonably be expected to continue at these runes
+	case '%', '-', '.', '<', '>', '\\', '^', '`', '{', '|', '}', '~':
+		return false
+	default:
+		// pattern :params may not contain unencoded characters
+		return !isUnescaped(r)
 	}
-	// if pattern is a /tree/, path must start with the pattern
-	return len(path) >= n && path[0:n] == pattern
 }
 
 // cleanPath returns the canonical path, eliminating . and .. elements.
