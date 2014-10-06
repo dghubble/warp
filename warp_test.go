@@ -31,7 +31,7 @@ var handlerTests = []struct {
 	method  string // test request method
 	url     string // test request url
 	code    int    // expected HTTP response code
-	pattern string // expected matching pattern
+	pattern string // expected pattern match
 }{
 	// leaf paths
 	{"GET", "/leaf", 200, "/leaf"},
@@ -86,14 +86,25 @@ func TestHandler(t *testing.T) {
 
 	for _, ht := range handlerTests {
 		r := newRequest(ht.method, ht.url)
-		handler, pattern := mux.Handler(r)
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, r)
-		if w.Code != ht.code {
-			t.Errorf("%s %s -> code %d, want %d", ht.method, ht.url, w.Code, ht.code)
-		}
+		_, pattern := mux.Handler(r)
 		if pattern != ht.pattern {
 			t.Errorf("%s %s -> pattern %s, want %s", ht.method, ht.url, pattern, ht.pattern)
+		}
+	}
+}
+
+func TestServeHTTP(t *testing.T) {
+	mux := NewServeMux()
+	for _, route := range registerRoutes {
+		mux.HandleRoute(route.pattern, stringHandler(route.message), route.rules...)
+	}
+
+	for _, ht := range handlerTests {
+		r := newRequest(ht.method, ht.url)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != ht.code {
+			t.Errorf("%s %s -> code %d, want %d", ht.method, ht.url, w.Code, ht.code)
 		}
 	}
 }
@@ -124,6 +135,7 @@ func TestNoDuplicateImplicitRedirects(t *testing.T) {
 
 // pattern capture parameters
 
+var emptyParams = make(url.Values)
 var pathMatchTests = []struct {
 	pattern   string
 	path      string     // path to be matched
@@ -132,7 +144,7 @@ var pathMatchTests = []struct {
 	params    url.Values // expected captured params key to value map
 }{
 	{"/", "/", true, 1, nil},
-	{"/", "/another_url", true, 1, url.Values{}},
+	{"/", "/another_url", true, 1, emptyParams},
 
 	{"/:name", "/tim", true, 1, url.Values{":name": {"tim"}}},
 	{"/foo/:name", "/foo/tim", true, 5, url.Values{":name": {"tim"}}},
@@ -160,6 +172,11 @@ var pathMatchTests = []struct {
 	{"/foo/:name/bar/", "/foo/tim/bar/", true, 10, url.Values{":name": {"tim"}}},
 	{"/foo/:name/bar/", "/foo/tim/bar/extra", true, 10, url.Values{":name": {"tim"}}},
 	{"/foo/:name/bar/", "/foo/tim/extra/bar/", false, 6, nil},
+
+	// host-specific patterns
+	{"domain.com/", "example.com/", false, 0, nil},
+	{"domain.com/", "domain.com/anything", true, 11, emptyParams},
+	{"domain.com/foo/:name", "domain.com/foo/tim", true, 15, url.Values{":name": {"tim"}}},
 
 	// pattern with multiple capture params
 	{"/foo/:name/bar/:id", "/foo/tim/bar", false, 9, nil},
@@ -211,24 +228,39 @@ var registerParamRoutes = []struct {
 	{"github.com/:name", nil},
 }
 
-var emptyParams = make(url.Values)
-
 var paramTests = []struct {
-	method string     // test request method
-	url    string     // test request url
-	code   int        // expected HTTP response code
-	params url.Values // expected captured params key to value map
+	method  string     // test request method
+	url     string     // test request url
+	code    int        // expected HTTP response code
+	pattern string     // expected pattern match
+	params  url.Values // expected captured params key to value map
 }{
 	// leaf paths
-	{"GET", "/unknown", 404, emptyParams},
-	{"GET", "/foo/tim", 200, url.Values{":name": {"tim"}}},
-	{"GET", "/foo/tim/", 404, emptyParams},
-	{"GET", "/bar/tim", 301, emptyParams},
-	{"GET", "/bar/tim/", 200, url.Values{":name": {"tim"}}},
-	{"GET", "/first/23/last", 200, url.Values{":age": {"23"}}},
-	{"GET", "/first/23/last/", 404, emptyParams},
-	{"GET", "/begin/0:00/end/16:54/", 200, url.Values{":start": {"0:00"}, ":stop": {"16:54"}}},
-	// {"GET", "http://github.com/dghubble", 200, url.Values{":name": {"dghubble"}}},
+	{"GET", "/unknown", 404, "", emptyParams},
+	{"GET", "/foo/tim", 200, "/foo/:name", url.Values{":name": {"tim"}}},
+	{"GET", "/foo/tim/", 404, "", emptyParams},
+	// implicit redirect can capture params too, they just aren't very useful
+	{"GET", "/bar/tim", 301, "/bar/:name/", url.Values{":name": {"tim"}}},
+	{"GET", "/bar/tim/", 200, "/bar/:name/", url.Values{":name": {"tim"}}},
+	{"GET", "/first/23/last", 200, "/first/:age/last", url.Values{":age": {"23"}}},
+	{"GET", "/first/23/last/", 404, "", emptyParams},
+	{"GET", "/begin/0:00/end/16:54/", 200, "/begin/:start/end/:stop/", url.Values{":start": {"0:00"}, ":stop": {"16:54"}}},
+	{"GET", "http://github.com/dghubble", 200, "github.com/:name", url.Values{":name": {"dghubble"}}},
+}
+
+func TestHandlerParams(t *testing.T) {
+	mux := NewServeMux()
+	for _, route := range registerParamRoutes {
+		mux.HandleRoute(route.pattern, stringHandler("message"), route.rules...)
+	}
+
+	for _, pt := range paramTests {
+		r := newRequest(pt.method, pt.url)
+		_, pattern := mux.Handler(r)
+		if pattern != pt.pattern {
+			t.Errorf("%s %s -> pattern %s, want %s", pt.method, pt.url, pattern, pt.pattern)
+		}
+	}
 }
 
 func TestServeHTTPParams(t *testing.T) {
@@ -242,10 +274,57 @@ func TestServeHTTPParams(t *testing.T) {
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, r)
 		if w.Code != pt.code {
-			t.Errorf("path %s -> code %d, want %d", pt.url, w.Code, pt.code)
+			t.Errorf("%s %s -> code %d, want %d", pt.method, pt.url, w.Code, pt.code)
 		}
 		if !reflect.DeepEqual(r.URL.Query(), pt.params) {
-			t.Errorf("path %s -> params %v, want %v", pt.url, r.URL.Query(), pt.params)
+			t.Errorf("%s %s -> params %v, want %v", pt.method, pt.url, r.URL.Query(), pt.params)
+		}
+	}
+}
+
+// routes whose patterns are host-specific, match more non-capture runes
+// (longer minux param names), and explicit have higher priority.
+
+var priorityRoutes = []struct {
+	pattern string
+	rules   []rule
+}{
+	{"/foo", nil},
+	{"domain.com/foo", nil},
+	{"/bar/", nil},
+	{"/bar/baz/", nil},
+	{"/bar/baz", nil},
+	{"/notes/new", nil},
+	{"/notes/:identifier", nil},
+}
+
+var routePriorityTests = []struct {
+	method  string // test request method
+	url     string // test request url
+	pattern string // expected pattern match
+}{
+	// prefer host-specific patterns over generic routes
+	{"GET", "http://domain.com/foo", "domain.com/foo"},
+	// prefer longer pattern /bar/baz/, over shorter /bar/
+	{"GET", "/bar/baz/", "/bar/baz/"},
+	// prefer explicitly added routes over implicit redirects (pattern != /bar/baz/)
+	{"GET", "/bar/baz", "/bar/baz"},
+	// prefer patterns that match more runes directly (negates effect of long param names)
+	{"GET", "/notes/new", "/notes/new"},
+	{"GET", "/notes/61", "/notes/:identifier"},
+}
+
+func TestHandlerPriority(t *testing.T) {
+	mux := NewServeMux()
+	for _, route := range priorityRoutes {
+		mux.HandleRoute(route.pattern, stringHandler("message"), route.rules...)
+	}
+
+	for _, rpt := range routePriorityTests {
+		r := newRequest(rpt.method, rpt.url)
+		_, pattern := mux.Handler(r)
+		if pattern != rpt.pattern {
+			t.Errorf("%s %s -> pattern %s, want %s", rpt.method, rpt.url, pattern, rpt.pattern)
 		}
 	}
 }

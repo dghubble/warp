@@ -135,20 +135,14 @@ func (mux *ServeMux) DelFunc(pattern string, handler func(http.ResponseWriter, *
 //
 // If there is no registered handler that applies to the request,
 // Handler returns a ``page not found'' handler and an empty pattern.
-func (mux *ServeMux) Handler(request *http.Request) (h http.Handler, pattern string) {
-	if request.Method != "CONNECT" {
-		if cleanedPath := cleanPath(request.URL.Path); cleanedPath != request.URL.Path {
-			url := *request.URL
-			url.Path = cleanedPath
-			_, pattern = mux.handler(request, cleanedPath)
-			return http.RedirectHandler(url.String(), http.StatusMovedPermanently), pattern
-		}
-	}
-	return mux.handler(request, request.URL.Path)
+func (mux *ServeMux) Handler(request *http.Request) (handler http.Handler, pattern string) {
+	handler, pattern, _ = mux.reqHandler(request)
+	return handler, pattern
 }
 
-// ServeHTTP dispatches the request to the handler whose
-// pattern most closely matches the request URL.
+// ServeHTTP matches the request to the route whose pattern most closely
+// matches the URL, encodes captured params in the request RawQuery, and
+// dispatches the request to the matched handler.
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.RequestURI == "*" {
 		if r.ProtoAtLeast(1, 1) {
@@ -157,9 +151,8 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	handler, pattern := mux.Handler(r)
+	handler, _, params := mux.reqHandler(r)
 	// add capture params to query params
-	_, _, params := pathMatch(pattern, r.URL.Path)
 	if len(params) > 0 {
 		r.URL.RawQuery = url.Values(params).Encode() + "&" + r.URL.RawQuery
 	}
@@ -193,7 +186,6 @@ func (mux *ServeMux) addRoute(pattern string, route *Route) {
 	if route.handler == nil {
 		panic("warp: nil handler")
 	}
-
 	mux.routes[pattern] = append(mux.routes[pattern], route)
 
 	// if registering the first pattern with a hostname
@@ -229,28 +221,45 @@ func (mux *ServeMux) hasImplicitRoute(pattern string) bool {
 	return false
 }
 
-// handler is the main implementation of Handler. Matches the path to a route
-// and returns the handler and pattern of the route. Host-specific patterns
-// take precedence over generic patterns. The given path is assumed to be the
-// canonical (cleaned) request.URL.Path, except for CONNECT methods. Returns a
-// NotFoundHandler and empty string pattern if no route matches.
-func (mux *ServeMux) handler(request *http.Request, path string) (handler http.Handler, pattern string) {
+// reqHandler matches the, possibly unclean, request URL path to the closest
+// route and returns the matched handler, pattern, and captured params. For
+// unclean paths, the returned handler is a redirect handler to the closes
+// matching patter. Matching clean paths is delegated to handler.
+func (mux *ServeMux) reqHandler(req *http.Request) (http.Handler, string, url.Values) {
+	if req.Method != "CONNECT" {
+		if cleanedPath := cleanPath(req.URL.Path); cleanedPath != req.URL.Path {
+			url := *req.URL
+			url.Path = cleanedPath
+			_, pattern, _ := mux.handler(req, cleanedPath)
+			return http.RedirectHandler(url.String(), http.StatusMovedPermanently), pattern, nil
+		}
+	}
+	return mux.handler(req, req.URL.Path)
+}
+
+// handler matches the given path to the route with the closest matching
+// pattern and returns the handler, pattern, and captured params. Returns
+// a NotFoundHandler, empty string pattern, and nil params if no route
+// matches. The given path is assumed to be the canonical (cleaned)
+// request.URL.Path, except for CONNECT methods. host-specific patterns
+// are preferred over generic path patterns.
+func (mux *ServeMux) handler(request *http.Request, path string) (handler http.Handler, pattern string, params url.Values) {
 	mux.mu.RLock()
 	defer mux.mu.RUnlock()
 
 	// host-specific patterns
 	if mux.anyHosts {
-		handler, pattern, _ = mux.match(request, request.Host+path)
+		handler, pattern, params = mux.match(request, request.Host+path)
 	}
 	// generic patterns
 	if handler == nil {
-		handler, pattern, _ = mux.match(request, path)
+		handler, pattern, params = mux.match(request, path)
 	}
 	// no handler found
 	if handler == nil {
 		handler, pattern = http.NotFoundHandler(), ""
 	}
-	return handler, pattern
+	return handler, pattern, params
 }
 
 // match will find the route that most closely matches the request. It first
