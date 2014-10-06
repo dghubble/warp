@@ -274,7 +274,8 @@ func (mux *ServeMux) handler(request *http.Request, path string) (handler http.H
 // Path /notes/new matches /notes/new over /notes/:id
 // Path /site/i matches /site/:name over /site/
 func (mux *ServeMux) match(request *http.Request, path string) (handler http.Handler, reportPattern string, params url.Values) {
-	var n = 0 // num runes matched in previous best match
+	var n = 0 // num runes matched in best match pattern
+	var l = 0 // length of best match pattern
 	for pattern, routes := range mux.routes {
 		// skip patterns that the path doesn't match
 		isMatch, runeCount, parameters := pathMatch(pattern, path)
@@ -293,14 +294,16 @@ func (mux *ServeMux) match(request *http.Request, path string) (handler http.Han
 				// redirect route's pattern differs from pattern key
 				reportPattern = route.pattern
 				params = parameters
+				l = len(pattern)
 			}
 
 			if runeCount == n {
-				// prefer explicit routes, longer patterns excluding param names
-				if !route.implicit {
+				// prefer explicit routes that are longer , longer patterns excluding param names
+				if !route.implicit && len(pattern) >= l {
 					handler = route.handler
 					reportPattern = route.pattern
 					params = parameters
+					l = len(pattern)
 				}
 			}
 		}

@@ -296,6 +296,8 @@ var priorityRoutes = []struct {
 	{"/bar/baz", nil},
 	{"/notes/new", nil},
 	{"/notes/:identifier", nil},
+	{"/pages/", nil},
+	{"/pages/:number", nil},
 }
 
 var routePriorityTests = []struct {
@@ -307,11 +309,18 @@ var routePriorityTests = []struct {
 	{"GET", "http://domain.com/foo", "domain.com/foo"},
 	// prefer longer pattern /bar/baz/, over shorter /bar/
 	{"GET", "/bar/baz/", "/bar/baz/"},
-	// prefer explicitly added routes over implicit redirects (pattern != /bar/baz/)
+	// prefer explicitly added routes over implicit redirects
 	{"GET", "/bar/baz", "/bar/baz"},
-	// prefer patterns that match more runes directly (negates effect of long param names)
+	// prefer patterns that match more runes directly (negates effect of long
+	// param names)
 	{"GET", "/notes/new", "/notes/new"},
 	{"GET", "/notes/61", "/notes/:identifier"},
+	// number of non-param matched runes being equal, prefer longer patterns
+	{"GET", "/pages/", "/pages/"},
+	{"GET", "/pages/61", "/pages/:number"},
+	{"GET", "/pages/66", "/pages/:number"},
+	// if routes are ambiguous (e.g. /:a/:b and /:b/:a), the path matches one
+	// at random, no guarantees provided
 }
 
 func TestHandlerPriority(t *testing.T) {
