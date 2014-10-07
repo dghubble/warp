@@ -1,16 +1,16 @@
 /*
-Package warp provides an HTTP request multiplexer supporting routes with
-capture parameters, HTTP method requirements, and other rule constriants.
+Package warp provides a request router/mux with capture parameters,
+HTTP verbs, and rules. Drop-in http.ServeMux compatability.
 
-warp.ServeMux is an HTTP muxer that matches incoming requests against
-a list of registered routes and calls the handler for the route that
-matches the route and its associated rules.
+warp.ServeMux is an HTTP request multiplexer that matches incoming
+requests against a list of registered routes and calls the handler
+for the route that matches the route and its associated rules.
 
-* Routes can have capture params and matched parts of the URL can be
-read from the query parameters. (e.g. req.URL.Query().Get(":id")).
-* Routes can require requests to have particular HTTP Verb Methods.
-* Routes can have additional matching constraints based on the request.
-* Drop-in compatability with http.ServeMux
+	* Routes can have capture params and matched parts of the URL can be
+	read from the query parameters. (e.g. req.URL.Query().Get(":id")).
+	* Routes can require requests to have particular HTTP Verb Methods.
+	* Routes can have additional matching constraints based on the request.
+	* Drop-in compatability with http.ServeMux
 
 The warp mux was originally forked from the standard http.ServeMux and
 is compatible with it. The warp mux implements the same method

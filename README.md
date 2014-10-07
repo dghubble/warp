@@ -118,6 +118,12 @@ or `HandleRouteFunc`.
 
 [https://godoc.org/github.com/dghubble/warp](https://godoc.org/github.com/dghubble/warp)
 
+## Performance
+
+    $ go test -bench .
+    PASS
+    BenchmarkRouteMatching   1000000        2486 ns/op
+
 ## License
 
 [BSD](License)
