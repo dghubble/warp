@@ -337,3 +337,14 @@ func TestHandlerPriority(t *testing.T) {
 		}
 	}
 }
+
+type ServeMuxer interface {
+	Handle(pattern string, handler http.Handler)
+	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
+	Handler(r *http.Request) (h http.Handler, pattern string)
+	ServeHTTP(w http.ResponseWriter, r *http.Request)
+}
+
+// compile-time assertions
+var _ ServeMuxer = http.NewServeMux()
+var _ ServeMuxer = NewServeMux()

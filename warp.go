@@ -1,8 +1,6 @@
 package warp
 
 import (
-	"bytes"
-	"fmt"
 	"net/http"
 	"net/url"
 	"path"
@@ -157,19 +155,6 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.RawQuery = url.Values(params).Encode() + "&" + r.URL.RawQuery
 	}
 	handler.ServeHTTP(w, r)
-}
-
-// String returns a string representation of the registered routes
-func (mux *ServeMux) String() string {
-	mux.mu.RLock()
-	defer mux.mu.RUnlock()
-	var buf bytes.Buffer
-	for pattern, _ := range mux.routes {
-		for _, route := range mux.routes[pattern] {
-			fmt.Fprintf(&buf, "%s -> %+v \n", pattern, route)
-		}
-	}
-	return buf.String()
 }
 
 // addRoute registers the pattern for the handler for requests with the given
