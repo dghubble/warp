@@ -11,6 +11,7 @@ var mux *warp.ServeMux = warp.NewServeMux()
 
 func init() {
 	mux.HandleFunc("/hello/:name", helloHandler)
+	mux.HandleFunc("/你好/:名", 你好处理)
 }
 
 // main starts serving the web application
@@ -26,4 +27,8 @@ func main() {
 // helloHandler writes a greeting
 func helloHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "Hello, %s!\n", req.URL.Query().Get(":name"))
+}
+
+func 你好处理(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(w, "Hello, %s!\n", req.URL.Query().Get(":名"))
 }
