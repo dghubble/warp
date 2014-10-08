@@ -1,23 +1,19 @@
-# warp
+# warp [![Build Status](https://travis-ci.org/dghubble/warp.png?branch=master)](https://travis-ci.org/dghubble/warp) [![GoDoc](http://godoc.org/github.com/dghubble/warp?status.png)](http://godoc.org/github.com/dghubble/warp)
+ <img align="right" src="https://s3.amazonaws.com/dghubble/8-bit-gopher.png">
 
-[![Build Status](https://travis-ci.org/dghubble/warp.png?branch=master)](https://travis-ci.org/dghubble/warp)
-
-Package warp provides an HTTP request multiplexer supporting routes with
-capture parameters, HTTP method requirements, and other rule constriants.
-
-warp.ServeMux is an HTTP muxer that matches incoming requests against
-a list of registered routes and calls the handler for the route that
-matches the route and its associated rules.
+Package warp provides warp.ServeMux, an HTTP request multiplexer supporting routes with capture parameters, HTTP method requirements,
+and other rule constriants. The mux matches incoming requests against
+a list of registered routes and offers the following features:
 
 * Routes can have capture params and matched parts of the URL can be
-read from the query parameters. (e.g. req.URL.Query().Get(":id")).
+read from the query parameters. (e.g. `req.URL.Query().Get(":id")`).
 * Routes can require requests to have particular HTTP Verb Methods.
-* Routes can have additional matching constraints based on the request.
-* Drop-in compatability with http.ServeMux 
+* Routes can have additional matching rules based on the request.
+* Drop-in compatability with [http.ServeMux](http://golang.org/pkg/net/http/#ServeMux) 
 
-The warp mux was originally forked from the standard http.ServeMux and
+The warp mux was originally forked from the standard [http.ServeMux](http://golang.org/pkg/net/http/#ServeMux) and
 is compatible with it. The warp mux implements the same method 
-signatures and passes all http.ServeMux tests (see serve_test.go).
+signatures and passes all http.ServeMux tests (see [serve_test.go](serve_test.go)).
 
 ## Install
 
@@ -42,7 +38,7 @@ as well.
 
     func init() {
       mux.HandleFunc("/hello/:name", helloHandler)
-      mux.HandleFunc("/你好/:名", 你好处理)
+      mux.GetFunc("/你好/:名", 你好处理) // GET only
     }
 
     // main starts serving the web application
@@ -63,57 +59,18 @@ as well.
     }
 
 A Route struct collects together a pattern, its handler, and a
-collection of rules that be satisfied for the request to match the 
+collection of rules that must be satisfied for the request to match the 
 route. HTTP Method (GET, POST, etc.) rule requirements are quite common
 so ServeMux provides convenience methods `mux.Get(pattern, handler)`, 
-etc. for each verb. Convenience methods `mux.GetFunc(pattern, handlerFunc)`,
-etc. are also provided for each verb to accept handler functions.
-
-    package main
-
-    import (
-      "fmt"
-      "github.com/dghubble/warp"
-      "log"
-      "net/http"
-    )
-
-    var mux *warp.ServeMux = warp.NewServeMux()
+etc. for each verb. Convenience methods `mux.GetFunc(pattern, handlerFunc)`, etc. are also provided for each verb to accept handler functions.
 
     func init() {
       mux.GetFunc("/notes", listHandler)
+      mux.GetFunc("/notes/new", newHandler)
       mux.PostFunc("/notes", createHandler)
       mux.GetFunc("/notes/:id", readHandler)
       mux.PutFunc("/notes/:id", updateHandler)
       mux.DelFunc("/notes/:id", deleteHandler)
-    }
-
-    // main starts serving the web application
-    func main() {
-      err := http.ListenAndServe("localhost:8080", mux)
-      if err != nil {
-        log.Fatal("ListenAndServe: ", err)
-      }
-    }
-
-    func listHandler(w http.ResponseWriter, req *http.Request) {
-      fmt.Fprint(w, "list")
-    }
-
-    func createHandler(w http.ResponseWriter, req *http.Request) {
-      fmt.Fprint(w, "create")
-    }
-
-    func readHandler(w http.ResponseWriter, req *http.Request) {
-      fmt.Fprintf(w, "read %s", req.URL.Query().Get(":id"))
-    }
-
-    func updateHandler(w http.ResponseWriter, req *http.Request) {
-      fmt.Fprintf(w, "update %s", req.URL.Query().Get(":id"))
-    }
-
-    func deleteHandler(w http.ResponseWriter, req *http.Request) {
-      fmt.Fprintf(w, "delete %s", req.URL.Query().Get(":id"))
     }
 
 To register ServeMux routes with rules directly, use `HandleRoute`

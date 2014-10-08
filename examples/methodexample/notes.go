@@ -11,6 +11,7 @@ var mux *warp.ServeMux = warp.NewServeMux()
 
 func init() {
 	mux.GetFunc("/notes", listHandler)
+	mux.GetFunc("/notes/new", newHandler)
 	mux.PostFunc("/notes", createHandler)
 	mux.GetFunc("/notes/:id", readHandler)
 	mux.PutFunc("/notes/:id", updateHandler)
@@ -29,6 +30,10 @@ func main() {
 
 func listHandler(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprint(w, "list")
+}
+
+func newHandler(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprint(w, "new")
 }
 
 func createHandler(w http.ResponseWriter, req *http.Request) {
