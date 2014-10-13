@@ -55,7 +55,7 @@ func newRequest(method, urlStr string) *http.Request {
 func TestHandler(t *testing.T) {
 	mux := NewServeMux()
 	for _, route := range registerRoutes {
-		mux.HandleRoute(route.pattern, stringHandler(route.message), route.rules...)
+		mux.Register(route.pattern, stringHandler(route.message), route.rules...)
 	}
 
 	for _, ht := range handlerTests {
@@ -70,7 +70,7 @@ func TestHandler(t *testing.T) {
 func TestServeHTTP(t *testing.T) {
 	mux := NewServeMux()
 	for _, route := range registerRoutes {
-		mux.HandleRoute(route.pattern, stringHandler(route.message), route.rules...)
+		mux.Register(route.pattern, stringHandler(route.message), route.rules...)
 	}
 
 	for _, ht := range handlerTests {
@@ -92,7 +92,7 @@ var implicitRedirectPatterns = []string{"/tree"}
 func TestNoDuplicateImplicitRedirects(t *testing.T) {
 	mux := NewServeMux()
 	for _, route := range registerRoutes {
-		mux.HandleRoute(route.pattern, stringHandler(route.message), route.rules...)
+		mux.Register(route.pattern, stringHandler(route.message), route.rules...)
 	}
 
 	var count int
@@ -115,14 +115,14 @@ func registerMethodRoutes(mux *ServeMux) {
 	mux.Get("/get-only", stringHandler("get-only"))
 	mux.Post("/post-only", stringHandler("post-only"))
 	mux.Put("/put-only", stringHandler("put-only"))
-	mux.Del("/delete-only", stringHandler("delete-only"))
+	mux.Delete("/delete-only", stringHandler("delete-only"))
 	// add method rules to route
-	mux.HandleRoute("/add-get-only", stringHandler("add-get-only")).Methods("GET")
-	mux.HandleRoute("/add-get-or-post-only", stringHandler("add-get-or-post-only")).Methods("GET", "POST")
+	mux.Register("/add-get-only", stringHandler("add-get-only")).Methods("GET")
+	mux.Register("/add-get-or-post-only", stringHandler("add-get-or-post-only")).Methods("GET", "POST")
 	// multiple allowed methods
-	mux.HandleRoute("/post-or-put", stringHandler("post or put only"), []rule{NewMethodRule("POST", "PUT")}...)
+	mux.Register("/post-or-put", stringHandler("post or put only"), []rule{NewMethodRule("POST", "PUT")}...)
 	// method rules on tree patterns
-	mux.Del("/tree/", stringHandler("delete-only tree"))
+	mux.Delete("/tree/", stringHandler("delete-only tree"))
 	mux.Post("/tree", stringHandler("post-only, override implicit redirect"))
 	mux.Get("/tree2/", stringHandler("get-only tree"))
 }
@@ -312,7 +312,7 @@ var paramTests = []struct {
 func TestHandlerParams(t *testing.T) {
 	mux := NewServeMux()
 	for _, route := range registerParamRoutes {
-		mux.HandleRoute(route.pattern, stringHandler("message"), route.rules...)
+		mux.Register(route.pattern, stringHandler("message"), route.rules...)
 	}
 
 	for _, pt := range paramTests {
@@ -327,7 +327,7 @@ func TestHandlerParams(t *testing.T) {
 func TestServeHTTPParams(t *testing.T) {
 	mux := NewServeMux()
 	for _, route := range registerParamRoutes {
-		mux.HandleRoute(route.pattern, stringHandler("message"), route.rules...)
+		mux.Register(route.pattern, stringHandler("message"), route.rules...)
 	}
 
 	for _, pt := range paramTests {
@@ -388,7 +388,7 @@ var routePriorityTests = []struct {
 func TestHandlerPriority(t *testing.T) {
 	mux := NewServeMux()
 	for _, route := range priorityRoutes {
-		mux.HandleRoute(route.pattern, stringHandler("message"), route.rules...)
+		mux.Register(route.pattern, stringHandler("message"), route.rules...)
 	}
 
 	for _, rpt := range routePriorityTests {

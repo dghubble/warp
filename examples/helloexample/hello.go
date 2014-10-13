@@ -10,8 +10,8 @@ import (
 var mux *warp.ServeMux = warp.NewServeMux()
 
 func init() {
-	mux.HandleFunc("/hello/:name", helloHandler)
-	mux.GetFunc("/你好/:名", 你好处理) // GET only
+	mux.Handle("/hello/:name", http.HandlerFunc(helloHandler))
+	mux.Get("/你好/:名", http.HandlerFunc(你好处理)) // GET only
 }
 
 // main starts serving the web application

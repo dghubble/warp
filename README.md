@@ -37,8 +37,8 @@ as well.
     var mux *warp.ServeMux = warp.NewServeMux()
 
     func init() {
-      mux.HandleFunc("/hello/:name", helloHandler)
-      mux.GetFunc("/你好/:名", 你好处理) // GET only
+      mux.Handle("/hello/:name", http.HandlerFunc(helloHandler))
+      mux.Get("/你好/:名", http.HandlerFunc(你好处理)) // GET only
     }
 
     // main starts serving the web application
@@ -62,19 +62,18 @@ A Route struct collects together a pattern, its handler, and a
 collection of rules that must be satisfied for the request to match the 
 route. HTTP Method (GET, POST, etc.) rule requirements are quite common
 so ServeMux provides convenience methods `mux.Get(pattern, handler)`, 
-etc. for each verb. Convenience methods `mux.GetFunc(pattern, handlerFunc)`, etc. are also provided for each verb to accept handler functions.
+etc. for each verb.
 
     func init() {
-      mux.GetFunc("/notes", listHandler)
-      mux.GetFunc("/notes/new", newHandler)
-      mux.PostFunc("/notes", createHandler)
-      mux.GetFunc("/notes/:id", readHandler)
-      mux.PutFunc("/notes/:id", updateHandler)
-      mux.DelFunc("/notes/:id", deleteHandler)
+      mux.Get("/notes", http.HandlerFunc(listHandler))
+      mux.Get("/notes/new", http.HandlerFunc(newHandler))
+      mux.Post("/notes", http.HandlerFunc(createHandler))
+      mux.Get("/notes/:id", http.HandlerFunc(readHandler))
+      mux.Put("/notes/:id", http.HandlerFunc(updateHandler))
+      mux.Delete("/notes/:id", http.HandlerFunc(deleteHandler))
     }
 
-To register ServeMux routes with rules directly, use `HandleRoute`
-or `HandleRouteFunc`.
+To register routes on a warp ServeMux directly, use the `ServeMux.Register(pattern string, handler http.Handler, rules ...rule) *Route` method.
 
 ## Full Docs
 

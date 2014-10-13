@@ -38,7 +38,7 @@ func (route *Route) allows(request *http.Request) bool {
 // the specified methods:
 //
 //	mux := warp.NewServeMux()
-//	mux.HandleRoute("/get-or-post", myHandler).Methods("GET", "POST")
+//	mux.Register("/get-or-post", myHandler).Methods("GET", "POST")
 func (route *Route) Methods(methods ...string) *Route {
 	for i, method := range methods {
 		methods[i] = strings.ToUpper(method)

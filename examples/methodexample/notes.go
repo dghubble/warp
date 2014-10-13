@@ -10,12 +10,12 @@ import (
 var mux *warp.ServeMux = warp.NewServeMux()
 
 func init() {
-	mux.GetFunc("/notes", listHandler)
-	mux.GetFunc("/notes/new", newHandler)
-	mux.PostFunc("/notes", createHandler)
-	mux.GetFunc("/notes/:id", readHandler)
-	mux.PutFunc("/notes/:id", updateHandler)
-	mux.DelFunc("/notes/:id", deleteHandler)
+	mux.Get("/notes", http.HandlerFunc(listHandler))
+	mux.Get("/notes/new", http.HandlerFunc(newHandler))
+	mux.Post("/notes", http.HandlerFunc(createHandler))
+	mux.Get("/notes/:id", http.HandlerFunc(readHandler))
+	mux.Put("/notes/:id", http.HandlerFunc(updateHandler))
+	mux.Delete("/notes/:id", http.HandlerFunc(deleteHandler))
 }
 
 // main starts serving the web application

@@ -59,66 +59,36 @@ func (mux *ServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter
 	mux.Handle(pattern, http.HandlerFunc(handler))
 }
 
-// HandleRoute registers the handler for the pattern and rules. HandleRoute
-// returns the new Route entry.
-func (mux *ServeMux) HandleRoute(pattern string, handler http.Handler, rules ...rule) *Route {
+// Register registers the handler for the pattern and rules and returns the
+// new Route entry.
+func (mux *ServeMux) Register(pattern string, handler http.Handler, rules ...rule) *Route {
 	route := NewRoute(pattern, handler, rules...)
 	mux.addRoute(pattern, route)
 	return route
 }
 
-// HandleRouteFunc registers the handler function for the pattern and rules.
-// Returns the new Route entry.
-func (mux *ServeMux) HandleRouteFunc(pattern string, handler func(http.ResponseWriter, *http.Request), rules ...rule) *Route {
-	return mux.HandleRoute(pattern, http.HandlerFunc(handler), rules...)
-}
-
 // Get registers the handler for the pattern and GET requests only. Returns
 // the new Route entry.
 func (mux *ServeMux) Get(pattern string, handler http.Handler) *Route {
-	return mux.HandleRoute(pattern, handler, NewMethodRule("GET"))
+	return mux.Register(pattern, handler, NewMethodRule("GET"))
 }
 
 // Post registers the handler for the pattern and POST requests only. Returns
 // the new Route entry.
 func (mux *ServeMux) Post(pattern string, handler http.Handler) *Route {
-	return mux.HandleRoute(pattern, handler, NewMethodRule("POST"))
+	return mux.Register(pattern, handler, NewMethodRule("POST"))
 }
 
 // Put registers the handler for the pattern and PUT requests only. Returns
 // the new Route entry.
 func (mux *ServeMux) Put(pattern string, handler http.Handler) *Route {
-	return mux.HandleRoute(pattern, handler, NewMethodRule("PUT"))
+	return mux.Register(pattern, handler, NewMethodRule("PUT"))
 }
 
 // Delete registers the handler for the pattern and DELETE requests only.
 // Returns the new Route entry.
-func (mux *ServeMux) Del(pattern string, handler http.Handler) *Route {
-	return mux.HandleRoute(pattern, handler, NewMethodRule("DELETE"))
-}
-
-// GetFunc registers the handler function for the pattern and GET requests
-// only. Returns the new Route entry.
-func (mux *ServeMux) GetFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
-	return mux.Get(pattern, http.HandlerFunc(handler))
-}
-
-// PostFunc registers the handler function for the pattern and POST requests
-// only. Returns the new Route entry.
-func (mux *ServeMux) PostFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
-	return mux.Post(pattern, http.HandlerFunc(handler))
-}
-
-// PutFunc registers the handler function for the pattern and PUT requests
-// only. Returns the new Route entry.
-func (mux *ServeMux) PutFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
-	return mux.Put(pattern, http.HandlerFunc(handler))
-}
-
-// DeleteFunc registers the handler function for the pattern and DELETE
-// requests only. Returns the new Route entry.
-func (mux *ServeMux) DelFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) *Route {
-	return mux.Del(pattern, http.HandlerFunc(handler))
+func (mux *ServeMux) Delete(pattern string, handler http.Handler) *Route {
+	return mux.Register(pattern, handler, NewMethodRule("DELETE"))
 }
 
 // Handler returns the handler to use for the given request,

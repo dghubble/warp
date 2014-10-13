@@ -8,7 +8,7 @@ import (
 func BenchmarkRouteMatching(b *testing.B) {
 	mux := NewServeMux()
 	handler := func(w http.ResponseWriter, r *http.Request) {}
-	mux.GetFunc("/foo/:bar", handler)
+	mux.Get("/foo/:bar", http.HandlerFunc(handler))
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
