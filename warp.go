@@ -61,7 +61,7 @@ func (mux *ServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter
 
 // Register registers the handler for the pattern and rules and returns the
 // new Route entry.
-func (mux *ServeMux) Register(pattern string, handler http.Handler, rules ...rule) *Route {
+func (mux *ServeMux) Register(pattern string, handler http.Handler, rules ...Rule) *Route {
 	route := NewRoute(pattern, handler, rules...)
 	mux.addRoute(pattern, route)
 	return route
@@ -239,7 +239,7 @@ func (mux *ServeMux) match(request *http.Request, path string) (handler http.Han
 		}
 		for _, route := range routes {
 			// skip routes with rules that don't allow the request
-			if !route.allows(request) {
+			if !route.Allows(request) {
 				continue
 			}
 			// prefer longer patterns

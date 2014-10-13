@@ -55,7 +55,7 @@ as well.
 	}
 
 A Route struct collects together a pattern, its handler, and a
-collection of rules that must be satisfied for the request to match the
+collection of Rules that must be satisfied for the request to match the
 route. HTTP Method (GET, POST, etc.) rule requirements are quite common
 so ServeMux provides convenience methods mux.Get(pattern, handler),
 etc. for each verb.
@@ -70,7 +70,7 @@ etc. for each verb.
 	}
 
 To register routes on a warp ServeMux directly, use the
-`ServeMux.Register(pattern string, handler http.Handler, rules ...rule) *Route`
+`ServeMux.Register(pattern string, handler http.Handler, rules ...Rule) *Route`
 method.
 */
 package warp

@@ -13,7 +13,7 @@ import (
 var registerRoutes = []struct {
 	pattern string
 	message string // to create a handle that returns the string
-	rules   []rule
+	rules   []Rule
 }{
 	{"/leaf", "leaf", nil},
 	{"/tree/", "tree", nil},
@@ -120,7 +120,7 @@ func registerMethodRoutes(mux *ServeMux) {
 	mux.Register("/add-get-only", stringHandler("add-get-only")).Methods("GET")
 	mux.Register("/add-get-or-post-only", stringHandler("add-get-or-post-only")).Methods("GET", "POST")
 	// multiple allowed methods
-	mux.Register("/post-or-put", stringHandler("post or put only"), []rule{NewMethodRule("POST", "PUT")}...)
+	mux.Register("/post-or-put", stringHandler("post or put only"), []Rule{NewMethodRule("POST", "PUT")}...)
 	// method rules on tree patterns
 	mux.Delete("/tree/", stringHandler("delete-only tree"))
 	mux.Post("/tree", stringHandler("post-only, override implicit redirect"))
@@ -279,7 +279,7 @@ func TestPathMatch(t *testing.T) {
 
 var registerParamRoutes = []struct {
 	pattern string
-	rules   []rule
+	rules   []Rule
 }{
 	{"/foo/:name", nil},
 	{"/bar/:name/", nil},
@@ -349,7 +349,7 @@ func TestServeHTTPParams(t *testing.T) {
 
 var priorityRoutes = []struct {
 	pattern string
-	rules   []rule
+	rules   []Rule
 }{
 	{"/foo", nil},
 	{"domain.com/foo", nil},
