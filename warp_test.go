@@ -116,7 +116,9 @@ func registerMethodRoutes(mux *ServeMux) {
 	mux.Post("/post-only", stringHandler("post-only"))
 	mux.Put("/put-only", stringHandler("put-only"))
 	mux.Delete("/delete-only", stringHandler("delete-only"))
-	// add method rules to route
+	mux.Head("/head-only", stringHandler("head-only"))
+	mux.Options("/options-only", stringHandler("options-only"))
+	// adding methods via the Route.Methods(...string) method
 	mux.Register("/add-get-only", stringHandler("add-get-only")).Methods("GET")
 	mux.Register("/add-get-or-post-only", stringHandler("add-get-or-post-only")).Methods("GET", "POST")
 	// multiple allowed methods
@@ -141,9 +143,14 @@ var methodTests = []struct {
 	{"POST", "/post-only", 200, "/post-only"},
 	{"PUT", "/put-only", 200, "/put-only"},
 	{"DELETE", "/delete-only", 200, "/delete-only"},
+	{"HEAD", "/head-only", 200, "/head-only"},
+	{"OPTIONS", "/options-only", 200, "/options-only"},
 	{"GET", "/post-only", 404, ""},
 	{"GET", "/put-only", 404, ""},
 	{"GET", "/delete-only", 404, ""},
+	{"GET", "/head-only", 404, ""},
+	{"GET", "/options-only", 404, ""},
+	// adding methods via the Route.Methods(...string) method
 	{"GET", "/add-get-only", 200, "/add-get-only"},
 	{"GET", "/add-get-or-post-only", 200, "/add-get-or-post-only"},
 	{"POST", "/add-get-or-post-only", 200, "/add-get-or-post-only"},

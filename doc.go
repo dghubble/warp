@@ -56,9 +56,9 @@ as well.
 
 A Route struct collects together a pattern, its handler, and a
 collection of Rules that must be satisfied for the request to match the
-route. HTTP Method (GET, POST, etc.) rule requirements are quite common
-so ServeMux provides convenience methods mux.Get(pattern, handler),
-etc. for each verb.
+route. HTTP Method requirements (e.g. GET, POST, PUT, DELETE, HEAD,
+OPTIONS) are quite common, so ServeMux provides convenience methods for
+each verb (e.g. mux.Get(pattern, handler)).
 
 	func init() {
 		mux.Get("/notes", http.HandlerFunc(listHandler))

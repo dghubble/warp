@@ -67,6 +67,12 @@ func (mux *ServeMux) Register(pattern string, handler http.Handler, rules ...Rul
 	return route
 }
 
+// Head registers the handler for the pattern and HEAD requests only. Returns
+// the new Route entry.
+func (mux *ServeMux) Head(pattern string, handler http.Handler) *Route {
+	return mux.Register(pattern, handler, NewMethodRule("HEAD"))
+}
+
 // Get registers the handler for the pattern and GET requests only. Returns
 // the new Route entry.
 func (mux *ServeMux) Get(pattern string, handler http.Handler) *Route {
@@ -89,6 +95,12 @@ func (mux *ServeMux) Put(pattern string, handler http.Handler) *Route {
 // Returns the new Route entry.
 func (mux *ServeMux) Delete(pattern string, handler http.Handler) *Route {
 	return mux.Register(pattern, handler, NewMethodRule("DELETE"))
+}
+
+// Options registers the handler for the pattern and OPTIONS requests only.
+// Returns the new Route entry.
+func (mux *ServeMux) Options(pattern string, handler http.Handler) *Route {
+	return mux.Register(pattern, handler, NewMethodRule("OPTIONS"))
 }
 
 // Handler returns the handler to use for the given request,
