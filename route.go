@@ -2,6 +2,7 @@ package warp
 
 import (
 	"net/http"
+	"strings"
 )
 
 // Route is an entry in a ServeMux routes map. It pairs a pattern with a
@@ -23,7 +24,7 @@ func NewRoute(pattern string, handler http.Handler, rules ...rule) *Route {
 	}
 }
 
-// allows returns true if all route rules allow the request.
+// allows returns true if each Route rule allows the request.
 func (route *Route) allows(request *http.Request) bool {
 	for _, rule := range route.rules {
 		if !rule.allows(request) {
@@ -31,4 +32,17 @@ func (route *Route) allows(request *http.Request) bool {
 		}
 	}
 	return true
+}
+
+// Methods adds a MethodRule to the Route to constrain it to
+// the specified methods:
+//
+//	mux := warp.NewServeMux()
+//	mux.HandleRoute("/get-or-post", myHandler).Methods("GET", "POST")
+func (route *Route) Methods(methods ...string) *Route {
+	for i, method := range methods {
+		methods[i] = strings.ToUpper(method)
+	}
+	route.rules = append(route.rules, NewMethodRule(methods...))
+	return route
 }

@@ -21,10 +21,6 @@ var registerRoutes = []struct {
 	{"/tree/", "tree", nil},
 	{"/explicit/", "explicit tree", nil},
 	{"/explicit", "explicit leaf", nil},
-	{"/get-only", "get only", []rule{NewMethodRule("GET")}},
-	{"/post-or-put", "post or put only", []rule{NewMethodRule("POST", "PUT")}},
-	{"/delete-only/", "delete only tree", []rule{NewMethodRule("DELETE")}},
-	{"/delete-only", "allow post, override implicit redirect", []rule{NewMethodRule("POST")}},
 }
 
 var handlerTests = []struct {
@@ -37,10 +33,8 @@ var handlerTests = []struct {
 	{"GET", "/leaf", 200, "/leaf"},
 	// no trailing slash redirect for leaf patterns (no trailing slash)
 	{"GET", "/leaf/", 404, ""},
-
 	// unmatched path
 	{"GET", "/unmatched", 404, ""},
-
 	// // directory paths
 	{"GET", "/tree/", 200, "/tree/"},
 	// ServeMux inserts implicit permanent redirect
@@ -48,26 +42,6 @@ var handlerTests = []struct {
 	{"GET", "/explicit/", 200, "/explicit/"},
 	// explicit route overrides implicit redirect added by ServeMux
 	{"GET", "/explicit", 200, "/explicit"},
-
-	// method-specific routes
-	{"GET", "/get-only", 200, "/get-only"},
-	{"POST", "/get-only", 404, ""},
-	{"PUT", "/get-only", 404, ""},
-	{"DELETE", "/get-only", 404, ""},
-	{"GET", "/post-or-put", 404, ""},
-	{"POST", "/post-or-put", 200, "/post-or-put"},
-	{"PUT", "/post-or-put", 200, "/post-or-put"},
-	{"DELETE", "/post-or-put", 404, ""},
-	{"GET", "/delete-only/", 404, ""},
-	{"POST", "/delete-only/", 404, ""},
-	{"PUT", "/delete-only/", 404, ""},
-	{"DELETE", "/delete-only/", 200, "/delete-only/"},
-	// implicit redirects are not method specific
-	{"GET", "/delete-only", 301, "/delete-only/"},
-	{"PUT", "/delete-only", 301, "/delete-only/"},
-	{"DELETE", "/delete-only", 301, "/delete-only/"},
-	// explicit route overrides implicit redirect added by ServeMux
-	{"POST", "/delete-only", 200, "/delete-only"},
 }
 
 func newRequest(method, urlStr string) *http.Request {
@@ -109,7 +83,9 @@ func TestServeHTTP(t *testing.T) {
 	}
 }
 
-var implicitRedirectPatterns = []string{"/tree", "/delete-only"}
+// test no duplicate implicit routes
+
+var implicitRedirectPatterns = []string{"/tree"}
 
 // Tests that explicitly registering a /tree/ multiple times does not cause
 // ServeMux to add duplicate useless /tree -> /tree/ implicit redirects.
@@ -133,7 +109,92 @@ func TestNoDuplicateImplicitRedirects(t *testing.T) {
 	}
 }
 
-// pattern capture parameters
+// test method rules
+
+func registerMethodRoutes(mux *ServeMux) {
+	mux.Get("/get-only", stringHandler("get-only"))
+	mux.Post("/post-only", stringHandler("post-only"))
+	mux.Put("/put-only", stringHandler("put-only"))
+	mux.Del("/delete-only", stringHandler("delete-only"))
+	// add method rules to route
+	mux.HandleRoute("/add-get-only", stringHandler("add-get-only")).Methods("GET")
+	mux.HandleRoute("/add-get-or-post-only", stringHandler("add-get-or-post-only")).Methods("GET", "POST")
+	// multiple allowed methods
+	mux.HandleRoute("/post-or-put", stringHandler("post or put only"), []rule{NewMethodRule("POST", "PUT")}...)
+	// method rules on tree patterns
+	mux.Del("/tree/", stringHandler("delete-only tree"))
+	mux.Post("/tree", stringHandler("post-only, override implicit redirect"))
+	mux.Get("/tree2/", stringHandler("get-only tree"))
+}
+
+var methodTests = []struct {
+	method  string // test request method
+	url     string // test request url
+	code    int    // expected HTTP response code
+	pattern string // expected pattern match
+}{
+	// method-specific routes
+	{"GET", "/get-only", 200, "/get-only"},
+	{"POST", "/get-only", 404, ""},
+	{"PUT", "/get-only", 404, ""},
+	{"DELETE", "/get-only", 404, ""},
+	{"POST", "/post-only", 200, "/post-only"},
+	{"PUT", "/put-only", 200, "/put-only"},
+	{"DELETE", "/delete-only", 200, "/delete-only"},
+	{"GET", "/post-only", 404, ""},
+	{"GET", "/put-only", 404, ""},
+	{"GET", "/delete-only", 404, ""},
+	{"GET", "/add-get-only", 200, "/add-get-only"},
+	{"GET", "/add-get-or-post-only", 200, "/add-get-or-post-only"},
+	{"POST", "/add-get-or-post-only", 200, "/add-get-or-post-only"},
+	{"PUT", "/add-get-or-post-only", 404, ""},
+	// multiple allowed methods
+	{"GET", "/post-or-put", 404, ""},
+	{"POST", "/post-or-put", 200, "/post-or-put"},
+	{"PUT", "/post-or-put", 200, "/post-or-put"},
+	{"DELETE", "/post-or-put", 404, ""},
+	// method rules can be applied on tree patterns, just as on leaf patterns
+	{"GET", "/tree/", 404, ""},
+	{"POST", "/tree/", 404, ""},
+	{"PUT", "/tree/", 404, ""},
+	{"DELETE", "/tree/", 200, "/tree/"},
+	// explicit routes override implicit redirects, wrong method falls back to redirect
+	{"POST", "/tree", 200, "/tree"},
+	{"DELETE", "/tree", 301, "/tree/"},
+	// tree pattern implicit redirects do not enforce tree method rules
+	{"POST", "/tree2", 301, "/tree2/"},
+	{"PUT", "/tree2", 301, "/tree2/"},
+	{"DELETE", "/tree2", 301, "/tree2/"},
+}
+
+func TestHandlerMethods(t *testing.T) {
+	mux := NewServeMux()
+	registerMethodRoutes(mux)
+
+	for _, ht := range methodTests {
+		r := newRequest(ht.method, ht.url)
+		_, pattern := mux.Handler(r)
+		if pattern != ht.pattern {
+			t.Errorf("%s %s -> pattern %s, want %s", ht.method, ht.url, pattern, ht.pattern)
+		}
+	}
+}
+
+func TestServeHTTPMethods(t *testing.T) {
+	mux := NewServeMux()
+	registerMethodRoutes(mux)
+
+	for _, ht := range methodTests {
+		r := newRequest(ht.method, ht.url)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		if w.Code != ht.code {
+			t.Errorf("%s %s -> code %d, want %d", ht.method, ht.url, w.Code, ht.code)
+		}
+	}
+}
+
+// test pattern capture parameters
 
 var emptyParams = make(url.Values)
 var pathMatchTests = []struct {
@@ -282,8 +343,9 @@ func TestServeHTTPParams(t *testing.T) {
 	}
 }
 
-// routes whose patterns are host-specific, match more non-capture runes
-// (longer minux param names), and explicit have higher priority.
+// test route priorities - higher priority routes have patterns that are
+// host-specific, match more non-capture runes (longer minus param names),
+// and are explicit rather than implicit.
 
 var priorityRoutes = []struct {
 	pattern string
@@ -337,6 +399,8 @@ func TestHandlerPriority(t *testing.T) {
 		}
 	}
 }
+
+// test ServeMux implements http.ServeMux
 
 type ServeMuxer interface {
 	Handle(pattern string, handler http.Handler)

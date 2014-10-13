@@ -8,7 +8,7 @@ a list of registered routes and offers the following features:
 * Routes can have capture params and matched parts of the URL can be
 read from the query parameters. (e.g. `req.URL.Query().Get(":id")`).
 * Routes can require requests to have particular HTTP Verb Methods.
-* Routes can have additional matching rules based on the request.
+* Routes can have additional matching rules based on the [http.Request](http://golang.org/pkg/net/http/#Request).
 * Drop-in compatability with [http.ServeMux](http://golang.org/pkg/net/http/#ServeMux) 
 
 The warp mux was originally forked from the standard [http.ServeMux](http://golang.org/pkg/net/http/#ServeMux) and
