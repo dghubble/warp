@@ -7,8 +7,8 @@ import (
 // Route is an entry in a ServeMux routes map. It pairs a pattern with a
 // handler and a slice of rules that the request should pass.
 type Route struct {
-	pattern  string       // pattern to report that the request matched
 	handler  http.Handler // handler for the route
+	pattern  string       // pattern to report that the request matched
 	implicit bool         // true for implicit routes added by ServeMux
 	rules    []Rule       // route Rules
 }
@@ -16,10 +16,9 @@ type Route struct {
 // NewRoute allocates and returns a new *Route.
 func NewRoute(pattern string, handler http.Handler, rules ...Rule) *Route {
 	return &Route{
-		pattern:  pattern,
-		handler:  handler,
-		implicit: false,
-		rules:    rules,
+		pattern: pattern,
+		handler: handler,
+		rules:   rules,
 	}
 }
 

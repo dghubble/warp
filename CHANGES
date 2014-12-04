@@ -1,0 +1,32 @@
+# Changelog
+
+## 0.2.0
+In progress
+
+**Added**
+
+* Adopt a path trie data structure for getting routes quickly and without heap memory (i.e. garbage) allocations
+
+Previously paths were compared against keys in a map structure of registered patterns, with each comparison requiring iteration over the path and several allocations. A path trie requires k hash lookups where k is the number of "/" separated parts in the path (typically 2-5) and zero allocations.
+
+**Changed**
+
+We've chosen to maintain http.ServeMux method signatures to continue to provide drop-in code compatability. However, some routing behaviors will purposefully differ from http.ServeMux, so some ported http.ServeMux tests will be updated accordingly.
+
+* Stop treating "/" or patterns ending in "/" as /something/" as rooted subtrees which match all paths not matched by other registered patterns. The previous behavior is not what many developers expect and requires backtracking or prioritizing longer matched routes with performance cost.
+* Require registered patterns to begin with a "/".
+
+**Removed**
+
+* Drop support for hostname specific matching. Running a muxer for multiple domains is not a priority for warp.
+
+## 0.1.0
+Commit: 1fee4cbb906de0c3ea99d324680622f787bc384a
+
+**Features**
+
+* Drop-in compatible fork of http.ServeMux; existing method signatures were preserved and all http.ServeMux tests pass
+* Patterns can have capture parameters that match parts of the URL
+* Patterns can be registered to match specific HTTP verbs (Head, Get, Post, Put, Delete, Options)
+* Supports unicode parameter names
+* Routes may be registered with additional http.Request matching rules
