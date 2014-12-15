@@ -5,20 +5,19 @@ In progress
 
 **Added**
 
-* Adopt a path trie data structure for getting routes quickly and without heap memory (i.e. garbage) allocations
-
-Previously paths were compared against keys in a map structure of registered patterns, with each comparison requiring iteration over the path and several allocations. A path trie requires k hash lookups where k is the number of "/" separated parts in the path (typically 2-5) and zero allocations.
+* Adopt a path trie data structure for getting routes quickly and without heap memory (i.e. garbage) allocations. A path trie requires k hash lookups where k is the number of "/" separated parts in the path (typically 2-5) and zero allocations.
 
 **Changed**
 
-We've chosen to maintain http.ServeMux method signatures to continue to provide drop-in code compatability. However, some routing behaviors will purposefully differ from http.ServeMux, so some ported http.ServeMux tests will be updated accordingly.
+Warp ServeMux continues to provide http.ServeMux method signatures for drop-in code compatability, but a few routing behaviors are purposefully different. The ported http.ServeMux tests are updated accordingly.
 
-* Stop treating "/" or patterns ending in "/" as /something/" as rooted subtrees which match all paths not matched by other registered patterns. The previous behavior is not what many developers expect and requires backtracking or prioritizing longer matched routes with performance cost.
+* Stop treating slash terminated patterns as rooted subtrees that match all paths not match by other patterns and having idential prefixes (e.g. previously path /id/unknown matched pattern /id/ and /, preferring the longest). This behavior can be emulated with params if desired.
 * Require registered patterns to begin with a "/".
 
 **Removed**
 
-* Drop support for hostname specific matching. Running a muxer for multiple domains is not a priority for warp.
+* Drop support for hostname specific pattern matching.
+* Map data structure for storing registered patterns and routes, with each comparison requiring iteration over the path and numerous allocations.
 
 ## 0.1.0
 Commit: 1fee4cbb906de0c3ea99d324680622f787bc384a

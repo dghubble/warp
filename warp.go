@@ -36,7 +36,6 @@ import (
 // equivalent .- and ..-free URL.
 type ServeMux struct {
 	routes   *trie.PathTrie // pattern -> routes
-	anyHosts bool           // whether any patterns contain hostnames
 }
 
 // NewServeMux allocates and returns a new *ServeMux.
@@ -129,11 +128,11 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	handler, _, params := mux.reqHandler(r)
+	handler, _, _ := mux.reqHandler(r)
 	// add capture params to query params
-	if len(params) > 0 {
-		r.URL.RawQuery = url.Values(params).Encode() + "&" + r.URL.RawQuery
-	}
+	// if len(params) > 0 {
+	// 	r.URL.RawQuery = url.Values(params).Encode() + "&" + r.URL.RawQuery
+	// }
 	handler.ServeHTTP(w, r)
 }
 
@@ -153,16 +152,10 @@ func (mux *ServeMux) addRoute(pattern string, route *Route) {
 	}
 	mux.routes.Put(pattern, route)
 
-	// if registering the first pattern with a hostname
-	if !mux.anyHosts && len(pattern) > 0 && pattern[0] != '/' {
-		mux.anyHosts = true
-	}
-
 	// if pattern is a /tree/ inserts a /tree -> /tree/ permanent redirect. The
-	// Put will silently do nothing if an existing route exists for the pattern
-	// since this pattern will have been explicitly added by the user.
-	// Note that the pattern key is /tree, but the redirection target is /tree/
-	// for compliance with the http.ServeMux.Handler convention.
+	// Put will silently do nothing if an existing route exists (already added
+	// or explicitly defined by the user). Note that the pattern key is /tree,
+	// but the redirection target is /tree/ per http.ServeMux convention.
 	if n := len(pattern); n > 1 && pattern[n-1] == '/' {
 		redirect := &Route{
 			http.RedirectHandler(pattern, http.StatusMovedPermanently),
@@ -206,11 +199,6 @@ func (mux *ServeMux) reqHandler(req *http.Request) (http.Handler, string, url.Va
 // request.URL.Path, except for CONNECT methods. host-specific patterns
 // are preferred over generic path patterns.
 func (mux *ServeMux) handler(request *http.Request, path string) (handler http.Handler, pattern string, params url.Values) {
-	// host-specific patterns
-	if mux.anyHosts {
-		handler, pattern, params = mux.match(request, request.Host+path)
-	}
-	// generic patterns
 	if handler == nil {
 		handler, pattern, params = mux.match(request, path)
 	}
