@@ -35,7 +35,7 @@ import (
 // redirecting any request containing . or .. elements to an
 // equivalent .- and ..-free URL.
 type ServeMux struct {
-	routes   *trie.PathTrie // pattern -> routes
+	routes *trie.PathTrie // pattern -> routes
 }
 
 // NewServeMux allocates and returns a new *ServeMux.
@@ -46,58 +46,53 @@ func NewServeMux() *ServeMux {
 }
 
 // Handle registers the handler for the given pattern. Handle panics if the
-// pattern is empty or the handler is nil.
+// pattern is not slash prefixed or if the handler is nil.
 func (mux *ServeMux) Handle(pattern string, handler http.Handler) {
-	mux.addRoute(pattern, NewRoute(pattern, handler))
+	mux.register(pattern, vANY, handler)
 }
 
-// HandleFunc registers the handler function for the given pattern.
+// HandleFunc registers the handler function for the given pattern. HandlerFunc
+// panics if the pattern is not slash prefixed or if the handler is nil.
 func (mux *ServeMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
 	mux.Handle(pattern, http.HandlerFunc(handler))
 }
 
-// Register registers the handler for the pattern and rules and returns the
-// new Route entry.
-func (mux *ServeMux) Register(pattern string, handler http.Handler, rules ...Rule) *Route {
-	route := NewRoute(pattern, handler, rules...)
-	mux.addRoute(pattern, route)
-	return route
-}
-
-// Head registers the handler for the pattern and HEAD requests only. Returns
-// the new Route entry.
-func (mux *ServeMux) Head(pattern string, handler http.Handler) *Route {
-	return mux.Register(pattern, handler, NewMethodRule("HEAD"))
-}
-
-// Get registers the handler for the pattern and GET requests only. Returns
-// the new Route entry.
+// Get registers the handler for the pattern and GET or HEAD requests. If the
+// handler truly should be for GET only, use Head after Get to set a different
+// HEAD handler. Returns the new Route entry.
 func (mux *ServeMux) Get(pattern string, handler http.Handler) *Route {
-	return mux.Register(pattern, handler, NewMethodRule("GET"))
+	mux.register(pattern, vHEAD, handler)
+	return mux.register(pattern, vGET, handler)
 }
 
 // Post registers the handler for the pattern and POST requests only. Returns
 // the new Route entry.
 func (mux *ServeMux) Post(pattern string, handler http.Handler) *Route {
-	return mux.Register(pattern, handler, NewMethodRule("POST"))
+	return mux.register(pattern, vPOST, handler)
 }
 
 // Put registers the handler for the pattern and PUT requests only. Returns
 // the new Route entry.
 func (mux *ServeMux) Put(pattern string, handler http.Handler) *Route {
-	return mux.Register(pattern, handler, NewMethodRule("PUT"))
+	return mux.register(pattern, vPUT, handler)
 }
 
 // Delete registers the handler for the pattern and DELETE requests only.
 // Returns the new Route entry.
 func (mux *ServeMux) Delete(pattern string, handler http.Handler) *Route {
-	return mux.Register(pattern, handler, NewMethodRule("DELETE"))
+	return mux.register(pattern, vDELETE, handler)
+}
+
+// Head registers the handler for the pattern and HEAD requests only. Returns
+// the new Route entry.
+func (mux *ServeMux) Head(pattern string, handler http.Handler) *Route {
+	return mux.register(pattern, vHEAD, handler)
 }
 
 // Options registers the handler for the pattern and OPTIONS requests only.
 // Returns the new Route entry.
 func (mux *ServeMux) Options(pattern string, handler http.Handler) *Route {
-	return mux.Register(pattern, handler, NewMethodRule("OPTIONS"))
+	return mux.register(pattern, vOPTIONS, handler)
 }
 
 // Handler returns the handler to use for the given request,
@@ -136,6 +131,76 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
+// Register registers the handler for the pattern and rules and returns the
+// new Route entry.
+func (mux *ServeMux) register(pattern string, verb string, handler http.Handler) *Route {
+	if pattern == "" {
+		panic("warp: invalid pattern " + pattern)
+	}
+	if pattern[0] != '/' {
+		panic("warp: invalid pattern " + pattern + ", must begin with '/'")
+	}
+	if handler == nil {
+		panic("warp: nil handler")
+	}
+
+	var route *Route
+	value := mux.routes.Get(pattern)
+	if value != nil {
+		// since route exists, already attempted to add /tree/ redirect
+		route = value.(*Route)
+		if !route.implicit {
+			// if explicit Route exists, add handler with correct verb
+			route.addHandler(verb, handler)
+			// write the updated (or overriding) Route
+			mux.routes.Put(pattern, route)
+			return route
+		}
+	}
+	mux.registerRedirect(pattern)
+	// create and write a new Route
+	route = NewRoute(pattern, handler, verb)
+	mux.routes.Put(pattern, route)
+	// check if redirect should be registered and register it
+	return route
+}
+
+// if pattern is a /tree/ and no handler is registered for /tree, inserts a
+// /tree -> /tree/ permanent redirect. Note that the pattern key is /tree,
+// but the redirection target is /tree/ per http.ServeMux convention.
+func (mux *ServeMux) registerRedirect(pattern string) {
+	if n := len(pattern); n > 1 && pattern[n-1] == '/' {
+		value := mux.routes.Get(pattern[:n-1])
+		if value == nil {
+			redirect := &Route{
+				pattern:  pattern,
+				any:      http.RedirectHandler(pattern, http.StatusMovedPermanently),
+				implicit: true}
+			mux.routes.Put(pattern[:n-1], redirect)
+		}
+	}
+}
+
+// func registerHandler(pattern string, handler http.Handler, verb string) *Route {
+// 	var route *Route
+// 	value := mux.routes.Get(pattern)
+// 	if value != nil {
+// 		route = value.(*Route)
+// 		if !route.implicit {
+// 			// add handler to existing user defined Route
+// 			route.addHandler(verb, handler)
+// 		} else {
+// 			route = NewRoute(pattern, handler, verb)
+// 		}
+// 	} else {
+// 		// create new Route (or override implicit Route)
+// 		route = NewRoute(pattern, handler, verb)
+// 	}
+// 	// write the (new or updated) Route
+// 	mux.routes.Put(pattern, route)
+
+// }
+
 // addRoute registers the pattern for the handler for requests with the given
 // HTTP method. If the pattern is a /tree/, inserts an implicit permanent
 // redirect for /tree to /tree/ (provided no implicit /tree route exists). If
@@ -147,7 +212,7 @@ func (mux *ServeMux) addRoute(pattern string, route *Route) {
 	if pattern[0] != '/' {
 		panic("warp: invalid pattern " + pattern + ", must begin with /")
 	}
-	if route.handler == nil {
+	if route.any == nil && route.get == nil && route.post == nil && route.put == nil && route.delete == nil {
 		panic("warp: nil handler")
 	}
 	mux.routes.Put(pattern, route)
@@ -158,9 +223,9 @@ func (mux *ServeMux) addRoute(pattern string, route *Route) {
 	// but the redirection target is /tree/ per http.ServeMux convention.
 	if n := len(pattern); n > 1 && pattern[n-1] == '/' {
 		redirect := &Route{
-			http.RedirectHandler(pattern, http.StatusMovedPermanently),
-			pattern,
-			true, nil}
+			pattern:  pattern,
+			any:      http.RedirectHandler(pattern, http.StatusMovedPermanently),
+			implicit: true}
 		mux.routes.Put(pattern[:n-1], redirect)
 	}
 }
@@ -224,7 +289,7 @@ func (mux *ServeMux) match(request *http.Request, path string) (handler http.Han
 	value := mux.routes.Get(path)
 	if value != nil {
 		route := value.(*Route)
-		return route.handler, route.pattern, nil
+		return route.getHandler(request.Method), route.pattern, nil
 	}
 	return nil, "", nil
 

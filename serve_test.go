@@ -19,7 +19,7 @@ func (s stringHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Result", string(s))
 }
 
-var handlers = []struct {
+var basicHandlers = []struct {
 	pattern string
 	msg     string
 }{
@@ -43,10 +43,10 @@ var vtests = []struct {
 	{"http://someHost.com/someDir", "/someDir/"},
 }
 
-func TestHostHandlers(t *testing.T) {
+func TestBasicHandlers(t *testing.T) {
 	defer afterTest(t)
 	mux := NewServeMux()
-	for _, h := range handlers {
+	for _, h := range basicHandlers {
 		mux.Handle(h.pattern, stringHandler(h.msg))
 	}
 	ts := httptest.NewServer(mux)

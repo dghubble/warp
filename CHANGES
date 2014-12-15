@@ -5,27 +5,46 @@ In progress
 
 **Added**
 
-* Adopt a path trie data structure for getting routes quickly and without heap memory (i.e. garbage) allocations. A path trie requires k hash lookups where k is the number of "/" separated parts in the path (typically 2-5) and zero allocations.
+* Adopt a path trie data structure for getting routes quickly and without heap
+memory (i.e. garbage) allocations. A path trie requires k hash lookups where k
+is the number of "/" separated parts in the path (typically 2-5) and zero
+allocations.
 
 **Changed**
 
-Warp ServeMux continues to provide http.ServeMux method signatures for drop-in code compatability, but a few routing behaviors are purposefully different. The ported http.ServeMux tests are updated accordingly.
+Warp ServeMux continues to provide http.ServeMux method signatures for drop-in
+code compatability, but a few routing behaviors are purposefully different. The
+ported http.ServeMux tests are updated accordingly.
 
-* Stop treating slash terminated patterns as rooted subtrees that match all paths not match by other patterns and having idential prefixes (e.g. previously path /id/unknown matched pattern /id/ and /, preferring the longest). This behavior can be emulated with params if desired.
+* Stop treating slash terminated patterns as rooted subtrees that match all
+paths not match by other patterns and having idential prefixes. Previously path
+/id/unknown would have matched pattern /id/ and /, preferring the longest. This
+behavior can be emulated with params if desired.
 * Require registered patterns to begin with a "/".
+* For explicitly added '/tree' paths registered for an HTTP verb or verbs, a
+request with a mismatched verb results in a 404 as for any other explicit
+route. Previously, the behavior was to fallback to an implicit /tree -> /tree/
+redirect if possible.
 
 **Removed**
 
-* Drop support for hostname specific pattern matching.
-* Map data structure for storing registered patterns and routes, with each comparison requiring iteration over the path and numerous allocations.
+* Dropped support for hostname specific pattern matching.
+* Removed support for custom route rules. HTTP verb matching is now builtin to
+each Route instead of requiring verb rules to be added to a Route.
+* Removed ServeMux.Register method since its purpose was to add method rules.
+* Discontinue use of a map structure for storing registered patterns and
+routes. Each comparison required iteration over the full path and numerous
+allocations.
 
 ## 0.1.0
 Commit: 1fee4cbb906de0c3ea99d324680622f787bc384a
 
 **Features**
 
-* Drop-in compatible fork of http.ServeMux; existing method signatures were preserved and all http.ServeMux tests pass
+* Drop-in compatible fork of http.ServeMux; existing method signatures were
+preserved and all http.ServeMux tests pass
 * Patterns can have capture parameters that match parts of the URL
-* Patterns can be registered to match specific HTTP verbs (Head, Get, Post, Put, Delete, Options)
+* Patterns can be registered to match specific HTTP verbs (Head, Get, Post,
+Put, Delete, Options)
 * Supports unicode parameter names
 * Routes may be registered with additional http.Request matching rules
