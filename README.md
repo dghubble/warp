@@ -83,7 +83,7 @@ To register routes on a warp ServeMux directly, use the `ServeMux.Register(patte
 
     $ go test -bench .
     PASS
-    BenchmarkRouteMatching   1000000        2486 ns/op
+    BenchmarkRouteMatching  50000   92580 ns/op   404751 B/op   13 allocs/op
 
 ## License
 
