@@ -16,8 +16,6 @@ var registerRoutes = []struct {
 }{
 	{"/leaf", "leaf"},
 	{"/tree/", "tree"},
-	// registers route twice to test that implicit redirects not duplicated
-	{"/tree/", "tree"},
 	{"/explicit", "explicit leaf"},
 	// implicit redirect should not be added by ServeMux since '/explicit' exists
 	{"/explicit/", "explicit tree"},
@@ -86,32 +84,6 @@ func TestServeHTTP(t *testing.T) {
 		}
 	}
 }
-
-// test no duplicate implicit routes
-
-var implicitRedirectPatterns = []string{"/tree"}
-
-// // Tests that explicitly registering a /tree/ multiple times does not cause
-// // ServeMux to add duplicate useless /tree -> /tree/ implicit redirects.
-// func TestNoDuplicateImplicitRedirects(t *testing.T) {
-// 	mux := NewServeMux()
-// 	for _, route := range registerRoutes {
-// 		mux.Register(route.pattern, stringHandler(route.message), route.rules...)
-// 	}
-
-// 	var count int
-// 	for _, pattern := range implicitRedirectPatterns {
-// 		count = 0
-// 		for _, route := range mux.routes[pattern] {
-// 			if route.implicit {
-// 				count++
-// 			}
-// 		}
-// 		if count > 1 {
-// 			t.Errorf("pattern %s has %d implicit redirects, want 1", pattern, count)
-// 		}
-// 	}
-// }
 
 // test verb rules
 

@@ -181,66 +181,6 @@ func (mux *ServeMux) registerRedirect(pattern string) {
 	}
 }
 
-// func registerHandler(pattern string, handler http.Handler, verb string) *Route {
-// 	var route *Route
-// 	value := mux.routes.Get(pattern)
-// 	if value != nil {
-// 		route = value.(*Route)
-// 		if !route.implicit {
-// 			// add handler to existing user defined Route
-// 			route.addHandler(verb, handler)
-// 		} else {
-// 			route = NewRoute(pattern, handler, verb)
-// 		}
-// 	} else {
-// 		// create new Route (or override implicit Route)
-// 		route = NewRoute(pattern, handler, verb)
-// 	}
-// 	// write the (new or updated) Route
-// 	mux.routes.Put(pattern, route)
-
-// }
-
-// addRoute registers the pattern for the handler for requests with the given
-// HTTP method. If the pattern is a /tree/, inserts an implicit permanent
-// redirect for /tree to /tree/ (provided no implicit /tree route exists). If
-// the pattern is empty or the handler is nil, add panics.
-func (mux *ServeMux) addRoute(pattern string, route *Route) {
-	if pattern == "" {
-		panic("warp: invalid pattern " + pattern)
-	}
-	if pattern[0] != '/' {
-		panic("warp: invalid pattern " + pattern + ", must begin with /")
-	}
-	if route.any == nil && route.get == nil && route.post == nil && route.put == nil && route.delete == nil {
-		panic("warp: nil handler")
-	}
-	mux.routes.Put(pattern, route)
-
-	// if pattern is a /tree/ inserts a /tree -> /tree/ permanent redirect. The
-	// Put will silently do nothing if an existing route exists (already added
-	// or explicitly defined by the user). Note that the pattern key is /tree,
-	// but the redirection target is /tree/ per http.ServeMux convention.
-	if n := len(pattern); n > 1 && pattern[n-1] == '/' {
-		redirect := &Route{
-			pattern:  pattern,
-			any:      http.RedirectHandler(pattern, http.StatusMovedPermanently),
-			implicit: true}
-		mux.routes.Put(pattern[:n-1], redirect)
-	}
-}
-
-// hasImplicitRoute returns true if the pattern has an implicit route (i.e.
-// added by ServeMux), false otherwise.
-// func (mux *ServeMux) hasImplicitRoute(pattern string) bool {
-// 	for _, route := range mux.routes[pattern] {
-// 		if route.implicit {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
-
 // reqHandler matches the, possibly unclean, request URL path to the closest
 // route and returns the matched handler, pattern, and captured params. For
 // unclean paths, the returned handler is a redirect handler to the closes

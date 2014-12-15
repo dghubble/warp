@@ -19,15 +19,15 @@ var vALL []string = []string{vGET, vPOST, vPUT, vDELETE, vHEAD, vOPTIONS, vANY}
 // Route is an entry in a ServeMux routes map. It pairs a pattern with a
 // handler and a slice of rules that the request should pass.
 type Route struct {
-	pattern  string       // pattern to report that the request matched
-	any      http.Handler // default handler
+	pattern  string       // pattern to report
 	get      http.Handler // GET handler
 	post     http.Handler // POST handler
 	put      http.Handler // PUT handler
 	delete   http.Handler // DELETE handler
 	head     http.Handler // HEAD handler
 	options  http.Handler // OPTIONS handler
-	implicit bool         // true for implicit routes added by ServeMux
+	any      http.Handler // default handler
+	implicit bool         // was route added by ServeMux?
 }
 
 // NewRoute allocates and returns a new *Route.
